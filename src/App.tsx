@@ -1,121 +1,92 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useEffect, useState } from 'react'
+import { Amplify } from 'aws-amplify'
+import { generateClient } from 'aws-amplify/data'
+import type { Schema } from '../amplify/data/resource'
 import './App.css'
 
+const outputModules = import.meta.glob('../amplify_outputs.json', {
+  eager: true,
+  import: 'default',
+}) as Record<string, unknown>
+
+const amplifyOutputs = Object.values(outputModules)[0]
+if (amplifyOutputs) Amplify.configure(amplifyOutputs)
+
+const client = generateClient<Schema>()
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [signal, setSignal] = useState('')
+  const [signals, setSignals] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSending, setIsSending] = useState(false)
+  const [apiMessage, setApiMessage] = useState('Connecting to the field notes API')
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadSignals() {
+      try {
+        const { data } = await client.models.Todo.list()
+        if (isActive) {
+          setSignals(data.map((item) => item.content).filter((content): content is string => Boolean(content)))
+          setApiMessage('Live from the KonttiSRVLS API')
+        }
+      } catch {
+        if (isActive) setApiMessage('Preview mode · connect Amplify to sync field notes')
+      } finally {
+        if (isActive) setIsLoading(false)
+      }
+    }
+
+    void loadSignals()
+    return () => { isActive = false }
+  }, [])
+
+  async function addSignal(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmedSignal = signal.trim()
+    if (!trimmedSignal || isSending) return
+
+    setIsSending(true)
+    try {
+      const { data } = await client.models.Todo.create({ content: trimmedSignal as never })
+      setSignals((current) => [data?.content ?? trimmedSignal, ...current])
+      setSignal('')
+      setApiMessage('Signal synced to the KonttiSRVLS API')
+    } catch {
+      setSignals((current) => [trimmedSignal, ...current])
+      setSignal('')
+      setApiMessage('Signal saved in this session · Amplify sync unavailable')
+    } finally {
+      setIsSending(false)
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+    <main className="welcome-page">
+      <header className="welcome-header">
+        <a className="wordmark" href="#top" aria-label="KonttiSRVLS home"><span className="wordmark-mark">K</span><span>KonttiSRVLS</span></a>
+        <p className="api-status"><span className={isLoading ? 'status-dot pulse' : 'status-dot'} />{apiMessage}</p>
+      </header>
+
+      <section className="welcome-content" id="top">
+        <p className="eyebrow">Where nothing ever happens</p>
+        <h1>Welcome to<br /><em>KonttiSRVLS.</em></h1>
+        <p className="welcome-copy">A place for useful ideas, thoughtful experiments, and large changes to dissapear.</p>
+        <a className="primary-link" href="#signal">Say hello <span aria-hidden="true">↓</span></a>
+
+        <form className="signal-form" id="signal" onSubmit={addSignal}>
+          <label htmlFor="signal-input">Leave a message</label>
+          <div className="input-row">
+            <input id="signal-input" value={signal} onChange={(event) => setSignal(event.target.value)} placeholder="Write something..." maxLength={140} />
+            <button type="submit" disabled={isSending || !signal.trim()} aria-label="Send message">{isSending ? '...' : '↗'}</button>
+          </div>
+          <p className="form-note">Messages: {signals.length}</p>
+        </form>
       </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <footer><span>KonttiSRVLS</span><span>Kontti Kontterton</span></footer>
+    </main>
   )
 }
 
